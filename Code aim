@@ -255,12 +255,12 @@ task.spawn(function()
     end
 end)
 
-local tgl1 = Main:CreateToggle("Аим V1 (Напрямую)", false, function(v)
+local tgl1 = Main:CreateToggle("Аим V1", false, function(v)
     aimV1 = v
     if v then aimV2 = false end
 end)
 
-local tgl2 = Main:CreateToggle("Аим V2 (Точная привязка)", false, function(v)
+local tgl2 = Main:CreateToggle("Аим V2", false, function(v)
     aimV2 = v
     if v then aimV1 = false end
     if not v then cameraOffset = nil end
@@ -363,4 +363,4 @@ end)
 
 NpcTab:CreateToggle("Проверка видимости НПС", false, function(v) checkNpcVisibility = v end)
 
-Window:Notify("Nyxen Hub", "Aimbot Pro загружен ✅", "success", 4)
+Window:Notify("Nyxen Hub", "Aimbot загружен v1.0", "success", 4)
