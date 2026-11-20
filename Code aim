@@ -1,0 +1,366 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local ApexUI = loadstring(game:HttpGet("https://pastebin.com/raw/YDjtnjyE"))()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local aimV1 = false
+local aimV2 = false
+local checkTeam = false
+local checkVisibility = false
+local whitelist = {}
+local cameraOffset = nil
+local aimTarget = nil
+
+local aimNpc = false
+local aimNpcV2 = false
+local checkNpcVisibility = false
+local npcCameraOffset = nil
+local npcTarget = nil
+local npcList = {}
+local npcConnection = nil
+
+local whitelistLabel = nil
+
+local function updateWhitelistLabel()
+    if not whitelistLabel then return end
+    local names = {}
+    for name in pairs(whitelist) do
+        table.insert(names, name)
+    end
+    if #names == 0 then
+        whitelistLabel:SetText("Белый список: пуст")
+    else
+        whitelistLabel:SetText("В белом списке (" .. #names .. "):\n" .. table.concat(names, "\n"))
+    end
+end
+
+local function isInWhitelist(player)
+    if not player then return false end
+    for name in pairs(whitelist) do
+        if player.Name:lower() == name:lower() or player.DisplayName:lower() == name:lower() then
+            return true
+        end
+    end
+    return false
+end
+
+local function isTeammate(player)
+    if not checkTeam then return false end
+    local myPlayer = LocalPlayer
+    if myPlayer.Team and player.Team and myPlayer.Team == player.Team then
+        return true
+    end
+    return false
+end
+
+local function isVisible(targetPart, checkEnabled)
+    if not checkEnabled then return true end
+    
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("Head") then return false end
+    
+    local origin = myChar.Head.Position
+    local destination = targetPart.Position
+    
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    
+    local rayResult = Workspace:Raycast(origin, destination - origin, rayParams)
+    
+    if not rayResult then return true end
+    if rayResult.Instance:IsDescendantOf(targetPart.Parent) then return true end
+    
+    return false
+end
+
+local function getClosestPlayer()
+    local closest = nil
+    local shortestDist = math.huge
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = myChar.HumanoidRootPart.Position
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+            local head = plr.Character.Head
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            
+            if hum and hum.Health > 0 then
+                if not isInWhitelist(plr) and not isTeammate(plr) then
+                    local dist = (head.Position - myPos).Magnitude
+                    if dist < shortestDist and dist > 2 then
+                        if isVisible(head, checkVisibility) then
+                            shortestDist = dist
+                            closest = plr
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function getClosestNPC()
+    local closest = nil
+    local shortestDist = math.huge
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local myPos = myChar.HumanoidRootPart.Position
+
+    for _, obj in ipairs(npcList) do
+        if obj and obj.Parent and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") then
+            local head = obj.Head
+            local hum = obj.Humanoid
+            if hum.Health > 0 then
+                local dist = (head.Position - myPos).Magnitude
+                if dist < shortestDist and dist > 2 then
+                    if isVisible(head, checkNpcVisibility) then
+                        shortestDist = dist
+                        closest = obj
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function startNpcScan()
+    npcList = {}
+    
+    local function isPlayerCharacter(model)
+        return Players:GetPlayerFromCharacter(model) ~= nil
+    end
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") then
+            if not isPlayerCharacter(obj) then
+                table.insert(npcList, obj)
+            end
+        end
+    end
+
+    if npcConnection then npcConnection:Disconnect() end
+    npcConnection = Workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") then
+            if not isPlayerCharacter(obj) then
+                table.insert(npcList, obj)
+            end
+        end
+    end)
+end
+
+local function stopNpcScan()
+    npcList = {}
+    if npcConnection then
+        npcConnection:Disconnect()
+        npcConnection = nil
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if aimV1 or aimV2 then
+        aimTarget = getClosestPlayer()
+        
+        if aimTarget and aimTarget.Character and aimTarget.Character:FindFirstChild("Head") then
+            local headPos = aimTarget.Character.Head.Position
+            
+            if aimV1 then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, headPos)
+            end
+            
+            if aimV2 then
+                if Camera.CameraType ~= Enum.CameraType.Scriptable then
+                    Camera.CameraType = Enum.CameraType.Scriptable
+                end
+                
+                local myHrp = LocalPlayer.Character.HumanoidRootPart
+                if not cameraOffset then
+                    cameraOffset = Camera.CFrame.Position - myHrp.Position
+                end
+                
+                local currentCamPos = myHrp.Position + cameraOffset
+                Camera.CFrame = CFrame.new(currentCamPos, headPos)
+            end
+        else
+            if aimV2 and Camera.CameraType == Enum.CameraType.Scriptable then
+                Camera.CameraType = Enum.CameraType.Custom
+                cameraOffset = nil 
+            end
+        end
+    end
+
+    if aimNpc or aimNpcV2 then
+        npcTarget = getClosestNPC()
+        
+        if npcTarget and npcTarget:FindFirstChild("Head") then
+            local headPos = npcTarget.Head.Position
+            
+            if aimNpc then
+                Camera.CFrame = CFrame.new(Camera.CFrame.Position, headPos)
+            end
+            
+            if aimNpcV2 then
+                if Camera.CameraType ~= Enum.CameraType.Scriptable then
+                    Camera.CameraType = Enum.CameraType.Scriptable
+                end
+                
+                local myHrp = LocalPlayer.Character.HumanoidRootPart
+                if not npcCameraOffset then
+                    npcCameraOffset = Camera.CFrame.Position - myHrp.Position
+                end
+                
+                local currentCamPos = myHrp.Position + npcCameraOffset
+                Camera.CFrame = CFrame.new(currentCamPos, headPos)
+            end
+        else
+            if aimNpcV2 and Camera.CameraType == Enum.CameraType.Scriptable then
+                Camera.CameraType = Enum.CameraType.Custom
+                npcCameraOffset = nil
+            end
+        end
+    end
+end)
+
+local Window = ApexUI:CreateWindow({ Title = "Aimbot Pro" })
+local Main = Window:CreateTab("Игроки")
+local NpcTab = Window:CreateTab("НПС аим")
+
+local statusLabel = Main:CreateLabel("Статус: Выключен")
+local targetLabel = Main:CreateLabel("Цель: Нет")
+
+local function updateLabels()
+    if aimV1 or aimV2 then
+        statusLabel:SetText("Статус: Игроки (" .. (aimV1 and "V1" or "V2") .. ")")
+        targetLabel:SetText("Цель: " .. (aimTarget and aimTarget.Name or "Поиск..."))
+    else
+        statusLabel:SetText("Статус: Выключен")
+        targetLabel:SetText("Цель: Нет")
+        if Camera.CameraType == Enum.CameraType.Scriptable then
+            Camera.CameraType = Enum.CameraType.Custom
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        updateLabels()
+    end
+end)
+
+local tgl1 = Main:CreateToggle("Аим V1 (Напрямую)", false, function(v)
+    aimV1 = v
+    if v then aimV2 = false end
+end)
+
+local tgl2 = Main:CreateToggle("Аим V2 (Точная привязка)", false, function(v)
+    aimV2 = v
+    if v then aimV1 = false end
+    if not v then cameraOffset = nil end
+end)
+
+Main:CreateToggle("Проверка команды", false, function(v) checkTeam = v end)
+Main:CreateToggle("Проверка видимости", false, function(v) checkVisibility = v end)
+
+whitelistLabel = Main:CreateLabel("Белый список: пуст")
+
+local whitelistInput
+whitelistInput = Main:CreateInput("Введите имя или часть имени...", function(text, enterPressed) end)
+
+Main:CreateButton("Добавить в белый список", function()
+    if whitelistInput then
+        local text = whitelistInput:GetValue()
+        if text then
+            text = text:gsub("^%s*(.-)%s*$", "%1")
+        end
+        
+        if text and text ~= "" then
+            local search = text:lower()
+            local addedCount = 0
+            local addedNames = {}
+
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer then
+                    local nameLower = plr.Name:lower()
+                    local displayLower = plr.DisplayName:lower()
+                    
+                    if nameLower:find(search, 1, true) or displayLower:find(search, 1, true) then
+                        whitelist[plr.Name:lower()] = true
+                        whitelist[plr.DisplayName:lower()] = true
+                        addedCount = addedCount + 1
+                        table.insert(addedNames, plr.Name)
+                    end
+                end
+            end
+
+            if addedCount > 0 then
+                updateWhitelistLabel()
+                Window:Notify("Aimbot", "Добавлено (" .. addedCount .. "): " .. table.concat(addedNames, ", "), "success", 5)
+            else
+                Window:Notify("Aimbot", "Игроки по запросу '" .. text .. "' не найдены", "warn", 3)
+            end
+            
+            whitelistInput:SetValue("")
+        else
+            Window:Notify("Aimbot", "Поле пустое!", "warn", 3)
+        end
+    end
+end)
+
+Main:CreateButton("Очистить белый список", function()
+    whitelist = {}
+    updateWhitelistLabel()
+    Window:Notify("Aimbot", "Белый список очищен", "warn", 3)
+end)
+
+local npcStatusLabel = NpcTab:CreateLabel("Статус: Выключен")
+local npcTargetLabel = NpcTab:CreateLabel("Цель: Нет")
+
+local function updateNpcLabels()
+    if aimNpc or aimNpcV2 then
+        npcStatusLabel:SetText("Статус: НПС (" .. (aimNpc and "V1" or "V2") .. ") | Найдено: " .. #npcList)
+        npcTargetLabel:SetText("Цель: " .. (npcTarget and npcTarget.Name or "Поиск..."))
+    else
+        npcStatusLabel:SetText("Статус: Выключен")
+        npcTargetLabel:SetText("Цель: Нет")
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        updateNpcLabels()
+    end
+end)
+
+NpcTab:CreateToggle("Аим на НПС (V1)", false, function(v)
+    aimNpc = v
+    if v then
+        aimNpcV2 = false
+        startNpcScan()
+    else
+        if not aimNpcV2 then stopNpcScan() end
+    end
+end)
+
+NpcTab:CreateToggle("Аим на НПС (V2)", false, function(v)
+    aimNpcV2 = v
+    if v then 
+        aimNpc = false 
+        startNpcScan()
+    else
+        if not aimNpc then stopNpcScan() end
+        npcCameraOffset = nil 
+    end
+end)
+
+NpcTab:CreateToggle("Проверка видимости НПС", false, function(v) checkNpcVisibility = v end)
+
+Window:Notify("Nyxen Hub", "Aimbot Pro загружен ✅", "success", 4)
