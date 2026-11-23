@@ -106,6 +106,20 @@ local function getClosestPlayer()
     return closest
 end
 
+local function isPlayerName(name)
+    if not name then return false end
+    local lowerName = name:lower()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name:lower() == lowerName or plr.DisplayName:lower() == lowerName then
+            return true
+        end
+        if plr.Character and plr.Character.Name:lower() == lowerName then
+            return true
+        end
+    end
+    return false
+end
+
 local function getClosestNPC()
     local closest = nil
     local shortestDist = math.huge
@@ -117,12 +131,15 @@ local function getClosestNPC()
         if obj and obj.Parent and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") then
             local head = obj.Head
             local hum = obj.Humanoid
+            
             if hum.Health > 0 then
-                local dist = (head.Position - myPos).Magnitude
-                if dist < shortestDist and dist > 2 then
-                    if isVisible(head, checkNpcVisibility) then
-                        shortestDist = dist
-                        closest = obj
+                if not isPlayerName(obj.Name) then
+                    local dist = (head.Position - myPos).Magnitude
+                    if dist < shortestDist and dist > 2 then
+                        if isVisible(head, checkNpcVisibility) then
+                            shortestDist = dist
+                            closest = obj
+                        end
                     end
                 end
             end
@@ -134,25 +151,21 @@ end
 local function startNpcScan()
     npcList = {}
     
-    local function isPlayerCharacter(model)
-        return Players:GetPlayerFromCharacter(model) ~= nil
+    local function addIfNPC(model)
+        if model:IsA("Model") and model:FindFirstChild("Humanoid") and model:FindFirstChild("Head") then
+            if not isPlayerName(model.Name) then
+                table.insert(npcList, model)
+            end
+        end
     end
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") then
-            if not isPlayerCharacter(obj) then
-                table.insert(npcList, obj)
-            end
-        end
+        addIfNPC(obj)
     end
 
     if npcConnection then npcConnection:Disconnect() end
     npcConnection = Workspace.DescendantAdded:Connect(function(obj)
-        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("Head") then
-            if not isPlayerCharacter(obj) then
-                table.insert(npcList, obj)
-            end
-        end
+        addIfNPC(obj)
     end)
 end
 
@@ -363,4 +376,4 @@ end)
 
 NpcTab:CreateToggle("Проверка видимости НПС", false, function(v) checkNpcVisibility = v end)
 
-Window:Notify("Nyxen Hub", "Aimbot загружен v1.0", "success", 4)
+Window:Notify("Nyxen Hub", "Aimbot загружен v1.1", "success", 4)
